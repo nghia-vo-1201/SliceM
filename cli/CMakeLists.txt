@@ -1,0 +1,3 @@
+add_executable(slicem_cli main.cpp)
+target_link_libraries(slicem_cli PRIVATE slicem_engine slicem_warnings)
+set_target_properties(slicem_cli PROPERTIES OUTPUT_NAME slicem)
