@@ -37,8 +37,15 @@ Required checks before emitting a grouped-colour job:
 
 1. **Order groups shortest-first.** Risk is bounded by the height of whichever group is printed
    first, so this strictly minimises it.
-2. `height(first printed group) <= profile.toolhead_clearance_height`.
-3. Horizontal separation between groups `>= profile.toolhead_clearance_radius`.
+2. `height(first printed group) <= profile.max_printed_group_height_mm`, taken from
+   `research/toolhead-clearance-model.md`: **MK3S 11 mm, MK4S 11 mm, Core One L 33 mm**.
+   Do **not** use PrusaSlicer's scalar `extruder_clearance_height` — it is a fallback that the
+   real machines ignore, and for the MK3S it is optimistic by 9 mm, which is a crash.
+3. Horizontal separation between groups must clear the toolhead cross-section at the relevant
+   height. Clearance is **directional**, not a radius: the obstruction sits in a specific y band
+   relative to the nozzle. A scalar radius is only acceptable as a conservative over-estimate.
+4. On Core One L nothing passes above roughly 185 mm; grouped printing is unavailable above that
+   height regardless of group size.
 4. The groups are genuinely top-most — no geometry anywhere in the model is printed after them.
 5. Nothing else in the model rises above the shared surface within the swept envelope.
 

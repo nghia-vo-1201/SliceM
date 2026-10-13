@@ -1,5 +1,7 @@
 graphify-out/
 
+info_source/
+
 build/
 out/
 cmake-build-*/

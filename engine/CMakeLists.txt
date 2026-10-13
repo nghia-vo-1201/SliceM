@@ -1,4 +1,5 @@
 add_library(slicem_engine STATIC
+  geometry/offset.cpp
   geometry/polygon.cpp
   slicing/mesh.cpp
   slicing/stl_reader.cpp

@@ -20,6 +20,11 @@ Release/
 
 graphify-out/
 
+# A local copy of the installed PrusaSlicer, kept for black-box reference only. Never commit it:
+# it is someone else's copyrighted binaries and assets, and the DLL alone is ~93 MB. Findings
+# belong in research/ as our own prose, not as a redistribution of their files.
+info_source/
+
 # Bulk black-box research artifacts: keep the extracted specs in research/*.md,
 # not the raw dumps they were derived from.
 research/samples/

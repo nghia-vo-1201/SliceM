@@ -2,3 +2,8 @@ add_executable(slicem_tests test_slicing.cpp)
 target_include_directories(slicem_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(slicem_tests PRIVATE slicem_engine slicem_warnings)
 add_test(NAME slicem_tests COMMAND slicem_tests)
+
+add_executable(slicem_offset_tests test_offset.cpp)
+target_include_directories(slicem_offset_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(slicem_offset_tests PRIVATE slicem_engine slicem_warnings)
+add_test(NAME slicem_offset_tests COMMAND slicem_offset_tests)

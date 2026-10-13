@@ -43,8 +43,10 @@ Therefore:
 
 - **Print the shorter group first.** Exposure is bounded by the height of the group printed first,
   so ordering shortest-first strictly minimises risk.
-- **Require `height(first group) <= profile.toolhead_clearance_height`**, and require the groups to
-  be separated in XY by at least `profile.toolhead_clearance_radius`.
+- **Cap the first group's height** at the verified limit in `research/toolhead-clearance-model.md`
+  — MK3S 11 mm, MK4S 11 mm, Core One L 33 mm — and clear the toolhead cross-section in XY.
+  Never use PrusaSlicer's scalar `extruder_clearance_height`: it is an ignored fallback and is
+  optimistic by 9 mm on the MK3S.
 - If that cannot be satisfied, **refuse and fall back** to a plain layer-wise colour change with an
   explicit explanation. Never silently emit a path that was not clearance-verified.
 

@@ -25,7 +25,7 @@ add_subdirectory(cli)
 add_subdirectory(tests)
 
 if(SLICEM_BUILD_GUI AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/gui/CMakeLists.txt)
-  find_package(Qt6 COMPONENTS Widgets QUIET)
+  find_package(Qt6 COMPONENTS Widgets OpenGLWidgets QUIET)
   if(Qt6_FOUND)
     add_subdirectory(gui)
   else()
