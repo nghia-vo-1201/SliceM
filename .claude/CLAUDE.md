@@ -95,6 +95,20 @@ unless `C:\msys64\ucrt64\bin` is prepended to `PATH`.
 
 Build artifacts: `build/cli/slicem.exe`, `build/gui/slicem-gui.exe`, `build/tests/slicem_tests.exe`.
 
+## 5a. Versioning and releases
+
+The version is defined once, in `project(SliceM VERSION ...)` in the top-level `CMakeLists.txt`,
+and reaches code through the generated `slicem_version.h`. Bump it there and nowhere else.
+
+Releases go to `github.com/nghia-vo-1201/SliceM`. `scripts/package.ps1` builds, tests, bundles the
+Qt/MinGW runtime with `windeployqt` and zips; `scripts/release.ps1` validates and publishes but
+does nothing without `-Confirm`; `.github/workflows/release.yml` does the same on a `v*` tag.
+A tag that disagrees with the CMake version is rejected by both paths.
+
+The in-app check (*Help → Check for updates*) only reads the releases API and opens the release
+page. **Do not make it download or execute anything** — that would turn a convenience into a
+remote code execution path into a machine that controls a hotend.
+
 ## 6. Working agreements
 
 - **Find code via the Graphify graph, not by grepping the tree** — `graphify query "<question>"

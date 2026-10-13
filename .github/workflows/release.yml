@@ -1,0 +1,70 @@
+name: Release
+
+# Publishes a Windows build whenever a version tag is pushed. The tag is the trigger, so cutting
+# a release is `git tag v0.2.0 && git push origin v0.2.0`.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up MSYS2 UCRT64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-qt6-base
+            mingw-w64-ucrt-x86_64-qt6-tools
+            zip
+
+      - name: Configure and build
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build
+
+      # A release that fails its own tests should never reach anyone.
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Verify tag matches the project version
+        run: |
+          version=$(grep -oP 'project\(\s*SliceM\s+VERSION\s+\K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt)
+          tag="${GITHUB_REF_NAME#v}"
+          echo "CMake version: $version   tag: $tag"
+          if [ "$version" != "$tag" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match CMakeLists.txt version $version"
+            exit 1
+          fi
+
+      - name: Stage and deploy Qt runtime
+        run: |
+          version=$(grep -oP 'project\(\s*SliceM\s+VERSION\s+\K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt)
+          stage="dist/SliceM-v${version}-win64"
+          mkdir -p "$stage"
+          cp build/gui/slicem-gui.exe build/cli/slicem.exe README.md "$stage"/
+          windeployqt6 --release --no-translations --no-system-d3d-compiler --no-opengl-sw "$stage/slicem-gui.exe"
+          for dll in libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll; do
+            cp "/ucrt64/bin/$dll" "$stage"/ 2>/dev/null || true
+          done
+          (cd dist && zip -r "SliceM-v${version}-win64.zip" "SliceM-v${version}-win64")
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+          generate_release_notes: true

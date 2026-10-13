@@ -15,6 +15,7 @@ class QSlider;
 namespace slicem_gui {
 
 class Viewport;
+class UpdateChecker;
 
 class MainWindow : public QMainWindow {
   Q_OBJECT
@@ -30,6 +31,9 @@ class MainWindow : public QMainWindow {
   void reslice();
   void update_summary();
   void update_mode();
+  void create_menus();
+
+  UpdateChecker* updater_ = nullptr;
 
   Viewport* viewport_ = nullptr;
   QDoubleSpinBox* layer_height_ = nullptr;

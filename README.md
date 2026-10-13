@@ -62,14 +62,25 @@ tests/         unit tests, including degenerate-geometry cases
 
 Early, but building and tested.
 
-Working today: STL loading (ASCII and binary, with vertex welding), mesh plane-intersection
-slicing into closed per-layer contours, a CLI harness, and a minimal Qt window that loads a model
-and reports its layer geometry. A 20 mm cube at 0.2 mm slices to exactly 100 layers of 400.000 mm²
-with no open contours, which is the analytic answer.
+Working today:
 
-Not implemented yet: perimeters, infill, top-surface detection, supports, G-code export, printer
-profiles, and the same-surface colour-group feature itself. **SliceM cannot yet produce anything
-printable.**
+- STL loading (ASCII and binary) with vertex welding onto a 1 nm integer grid
+- mesh plane-intersection slicing into closed per-layer contours
+- **2D polygon offsetting** with correct handling of the self-intersections offsetting creates, so
+  features thinner than twice the offset vanish rather than inverting — this is what perimeters,
+  infill boundaries, solid-surface detection and supports all build on
+- a Qt **3D viewport**: shaded solid rendering, build plate, orbit/pan/zoom, and a layer-preview
+  slider
+- a CLI harness for headless validation
+
+A 20 mm cube at 0.2 mm slices to exactly 100 layers of 400.000 mm² with no open contours, which is
+the analytic answer.
+
+Not implemented yet: supports, G-code export, printer profiles, and the same-surface colour-group
+feature itself. **SliceM cannot yet produce anything printable.**
+
+`research/` holds the clean-room findings, including a verified toolhead clearance model derived
+from gantry cross-section data — the input the colour-group feature's safety check depends on.
 
 ## Build
 
@@ -85,6 +96,32 @@ build/cli/slicem.exe --per-layer --layer-height 0.2 model.stl
 ```
 
 Running the GUI needs `C:\msys64\ucrt64\bin` on `PATH` for the Qt DLLs.
+
+## Releases and updating
+
+Releases are published to <https://github.com/nghia-vo-1201/SliceM/releases>.
+
+The version lives in one place — the `project(SliceM VERSION ...)` line in `CMakeLists.txt` — and
+both the packaging script and CI refuse to publish when a tag disagrees with it.
+
+**Cutting a release locally**
+
+```powershell
+.\scripts\package.ps1          # Release build + tests + windeployqt + dist/SliceM-vX.Y.Z-win64.zip
+.\scripts\release.ps1          # dry run: validates tag, clean tree, package, gh auth
+.\scripts\release.ps1 -Confirm # tags, pushes and publishes
+```
+
+**Or via CI**: pushing a `v*` tag runs `.github/workflows/release.yml`, which builds under MSYS2,
+runs the tests, checks the tag against the project version, and uploads the zip to the release.
+
+The zip bundles the Qt and MinGW runtime DLLs via `windeployqt`, so it runs on a machine that has
+never had MSYS2 installed.
+
+**In-app update check**: *Help → Check for updates* asks the GitHub releases API for the newest tag
+and offers to open the release page. It deliberately does **not** download or execute anything —
+an updater that fetches and runs a binary is a remote code execution path, which is not a
+reasonable thing to add to software that drives a 300 °C hotend to save one click.
 
 ## Licence
 

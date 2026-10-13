@@ -1,5 +1,11 @@
 cmake_minimum_required(VERSION 3.21)
-project(SliceM LANGUAGES CXX)
+
+# Single source of truth for the version. A release tag must match it: scripts/release.ps1
+# refuses to publish when the tag and this number disagree.
+project(SliceM VERSION 0.2.0 LANGUAGES CXX)
+
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/cmake/slicem_version.h.in
+               ${CMAKE_BINARY_DIR}/generated/slicem_version.h @ONLY)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -25,7 +31,7 @@ add_subdirectory(cli)
 add_subdirectory(tests)
 
 if(SLICEM_BUILD_GUI AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/gui/CMakeLists.txt)
-  find_package(Qt6 COMPONENTS Widgets OpenGLWidgets QUIET)
+  find_package(Qt6 COMPONENTS Widgets OpenGLWidgets Network QUIET)
   if(Qt6_FOUND)
     add_subdirectory(gui)
   else()

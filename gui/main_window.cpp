@@ -1,5 +1,13 @@
 #include "main_window.h"
 
+#include <QKeySequence>
+#include <QMenu>
+#include <QMenuBar>
+#include <QMessageBox>
+
+#include "slicem_version.h"
+#include "updater.h"
+
 #include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QHBoxLayout>
@@ -82,6 +90,7 @@ MainWindow::MainWindow() {
   root->addWidget(side_widget);
 
   setCentralWidget(central);
+  create_menus();
 
   connect(open_button, &QPushButton::clicked, this, &MainWindow::open_dialog);
   connect(reset_button, &QPushButton::clicked, viewport_, &Viewport::reset_view);
@@ -94,6 +103,30 @@ MainWindow::MainWindow() {
   update_summary();
   update_mode();
   resize(1100, 700);
+}
+
+void MainWindow::create_menus() {
+  updater_ = new UpdateChecker(this);
+
+  QMenu* file_menu = menuBar()->addMenu(tr("&File"));
+  file_menu->addAction(tr("&Open model..."), QKeySequence::Open, this, &MainWindow::open_dialog);
+  file_menu->addSeparator();
+  file_menu->addAction(tr("E&xit"), QKeySequence::Quit, this, &QWidget::close);
+
+  QMenu* help_menu = menuBar()->addMenu(tr("&Help"));
+  help_menu->addAction(tr("Check for &updates..."), this,
+                       [this]() { updater_->check(this, false); });
+  help_menu->addAction(tr("&About SliceM"), this, [this]() {
+    QMessageBox::about(
+        this, tr("About SliceM"),
+        tr("<b>SliceM %1</b><br><br>"
+           "An independently authored slicer for Prusa printers.<br><br>"
+           "This build slices geometry and previews layers. It does not yet generate "
+           "toolpaths or G-code, so it cannot drive a printer.")
+            .arg(QStringLiteral(SLICEM_VERSION)));
+  });
+
+  setWindowTitle(tr("SliceM %1").arg(QStringLiteral(SLICEM_VERSION)));
 }
 
 void MainWindow::open_dialog() {

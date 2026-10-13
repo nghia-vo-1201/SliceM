@@ -7,3 +7,13 @@ add_executable(slicem_offset_tests test_offset.cpp)
 target_include_directories(slicem_offset_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(slicem_offset_tests PRIVATE slicem_engine slicem_warnings)
 add_test(NAME slicem_offset_tests COMMAND slicem_offset_tests)
+
+add_executable(slicem_perimeter_tests test_perimeters.cpp)
+target_include_directories(slicem_perimeter_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(slicem_perimeter_tests PRIVATE slicem_engine slicem_warnings)
+add_test(NAME slicem_perimeter_tests COMMAND slicem_perimeter_tests)
+
+add_executable(slicem_infill_tests test_infill.cpp)
+target_include_directories(slicem_infill_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(slicem_infill_tests PRIVATE slicem_engine slicem_warnings)
+add_test(NAME slicem_infill_tests COMMAND slicem_infill_tests)

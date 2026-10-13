@@ -1,0 +1,12 @@
+#pragma once
+
+// Generated from cmake/slicem_version.h.in. The single source of truth for the version is the
+// project() call in the top-level CMakeLists.txt; a release tag must match it.
+
+#define SLICEM_VERSION "@PROJECT_VERSION@"
+#define SLICEM_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
+#define SLICEM_VERSION_MINOR @PROJECT_VERSION_MINOR@
+#define SLICEM_VERSION_PATCH @PROJECT_VERSION_PATCH@
+
+#define SLICEM_RELEASES_API "https://api.github.com/repos/nghia-vo-1201/SliceM/releases/latest"
+#define SLICEM_RELEASES_PAGE "https://github.com/nghia-vo-1201/SliceM/releases"
