@@ -15,11 +15,11 @@ and can ship itself as a release.
 | Booleans | union / intersection / difference on scaled-integer rings, shared-boundary safe |
 | Surfaces | top/bottom solid-region detection by boolean difference against neighbouring layers |
 | Toolpaths | N perimeters, rectilinear infill (density, angle, serpentine) |
-| G-code | MK3S (legacy family) emitter: start/end sequences, extrusion maths, retraction, skirt, fan |
+| G-code | MK3S (legacy family) emitter: start/end sequences, extrusion maths, retraction, skirt, fan, surface-driven solid shell |
 | GUI | Qt 6 OpenGL viewport: shaded solid, build plate, orbit/pan/zoom, layer slider |
 | CLI | `slicem.exe` headless harness, `--gcode` export |
 | Release | version in CMake → `slicem_version.h`, packaging script, `gh` release script, CI workflow, in-app update check |
-| Tests | 866 checks across 7 suites, warning-free under `-Wall -Wextra -Wpedantic` |
+| Tests | 1031 checks across 7 suites, warning-free under `-Wall -Wextra -Wpedantic` |
 
 Commits: `8648d4f` scaffold → `4123392` offsetting/viewport/clearance → `89c238b` perimeters/infill/release
 → `c398acf` session note → `b9f87c0` merge of the GitHub repo's own initial commit → booleans/surfaces/G-code.
@@ -74,30 +74,57 @@ local interior sides (the Martínez–Rueda–Feito 2009 treatment), pinned by t
 on the old behaviour. Found by the subagent implementing it, against the brief I wrote — worth
 recording, because the brief was wrong and the test was what caught it.
 
+## The third finding: a T-junction is not a crossing
+
+Wiring surface detection into the emitter immediately produced a wrong answer — 14 solid layers on
+a cube instead of 6, in a scattered pattern. The cause was not the new code. `generate_perimeters`
+was returning an **empty infill region** on exactly two of the cube's 100 layers, so those layers
+printed with no infill at all, and the empty region then read as an exposed surface in both
+directions and pulled a solid shell around it.
+
+The two layers are z = 0.9 and z = 19.1, where the box's facet diagonals cross the slice plane and
+the contour comes out with 8 vertices instead of 4 — four of them collinear, 0.9 mm from a corner.
+Inset by exactly 0.9 mm, two displaced edges meet precisely at the endpoint of a third. That is a
+**T-junction**, not a crossing, and `interior_intersection` requires both parameters strictly
+inside (0, 1), so it was never split. The unsplit crossbar left a spur, the chaining walk turned
+into it, the ring never closed, and the whole loop was dropped silently.
+
+The failure is razor-thin: the same contour offsets correctly at −0.225, −0.45, −0.675, −1.0 and
+−2.0 mm, and wrongly only at −0.9. Fixed by splitting every segment wherever another segment's
+endpoint lies strictly in its interior, tested exactly on the integer grid. Pinned by a test that
+offsets the plain and the collinear-vertex square at seven distances and requires identical
+results.
+
+Worth stating plainly: this bug was in the shipped code before surface detection existed, and no
+test caught it. What caught it was wiring two subsystems together and finding the answer did not
+match an oracle computable by hand.
+
 ## G-code status: validated structurally, never printed
 
-`slicem.exe --gcode` on the 20 mm calibration cube produces a 210 KB MK3S file: 100 layers,
-top z 20.000 mm, 33321.378 mm of path, 2998.924 mm³ deposited, 1246.808 mm of filament, all
+`slicem.exe --gcode` on the 20 mm calibration cube produces a 212 KB MK3S file: 100 layers,
+top z 20.000 mm, 33615.402 mm of path, 3025.386 mm³ deposited, 1257.809 mm of filament, all
 deposition inside x 111.775–138.225 / y 91.775–118.225 (cube centred on the bed plus a 3 mm skirt).
+Solid infill lands on layers 1–3 and 98–100 and nowhere else; the other 94 layers are sparse.
 
 Checked three independent ways:
 
 1. **A validation script written against the file, not the engine** — `G21`/`G90`/`M83` all set
    before the first extrusion, every coordinate inside the MK3S volume, no NaN or inf, 100
    `;LAYER_CHANGE` markers, and `M104 S0`/`M140 S0`/`M107`/`M84` all present at the end. My first
-   run of it was wrong: it summed only positive `E` and so counted the 1157 de-retractions twice.
-   Net `E` is 1246.007 mm against a geometric 1246.808 — **−0.064%**.
+   run of it was wrong: it summed only positive `E` and so counted every de-retraction twice.
+   Net `E` is 1257.009 mm against a geometric 1257.809 — short by exactly 0.800 mm, which is the
+   one retraction at the end of the job that is never recovered.
 2. **`prusa-gcodeviewer` 2.9.4** loads it and renders a solid cube with its skirt on the bed; the
-   layer slider reads 0.20 (1) to 20.00 (100); its own totals are 1.25 m and 3.73 g, which match
-   our footer (1246.81 mm, 2.99892 cm³ at PLA's 1.24 g/cm³) independently.
-3. Unit tests in `tests/test_gcode.cpp`.
+   layer slider reads 0.20 (1) to 20.00 (100); its own totals are 1.26 m and 3.77 g, which match
+   our footer (1257.81 mm, 3.02539 cm³ at PLA's 1.24 g/cm³) independently.
+3. Unit tests in `tests/test_gcode.cpp`, including one requiring every layer of the cube to carry
+   infill and the solid shell to land on exactly the first and last three layers.
 
 Known gaps, all deliberate rather than overlooked: no `M73` progress, `M115`, `M907` or windowed
 `G80`; no purge line (the skirt primes instead); `M900 K0` and `M221 S100` are emitted as explicit
 neutral states; at ≤20% infill the 2.25 mm line spacing exceeds the 2 mm retract threshold, giving
-1157 retractions — safe but slow, and the fix is travel-stays-inside-region logic; first/last 3
-layers are hard-coded solid rather than driven by the new surface detection; fan is a flat 100%
-from layer 2; no colour change; no Buddy dialect.
+~1180 retractions — safe but slow, and the fix is travel-stays-inside-region logic; fan is a flat
+100% from layer 2; no colour change; no Buddy dialect.
 
 **This has not been printed.** It passed structural validation and a viewer pass. That is not the
 same as being safe on hardware, and the first run on the MK3S must be a watched one.
@@ -109,7 +136,7 @@ same as being safe on hardware, and the first run on the MK3S must be a watched 
    before any grouped-colour job is attempted.
 2. **Publishing is blocked on a token permission.** `origin` → `nghia-vo-1201/SliceM` is
    configured, the repo's own "Initial commit" has been merged in locally (so its history is
-   preserved, no force-push needed), and local `main` is 5 commits ahead and ready.
+   preserved, no force-push needed), and local `main` is several commits ahead and ready.
 
    `git push` returns **403: Permission to nghia-vo-1201/SliceM.git denied**, even though the API
    reports `push: true` — that field reflects the *account's* role, not the *token's* grants. A
@@ -130,11 +157,8 @@ same as being safe on hardware, and the first run on the MK3S must be a watched 
 
 Shortest path to something printable, in order:
 
-1. **Wire `detect_surfaces` into the G-code path.** It exists and is tested, but the emitter still
-   hard-codes the first and last 3 layers as solid. Until they are connected, a model with an
-   internal ceiling prints with a hole in it.
-2. Travel-stays-inside-region logic, to stop retracting 1157 times on a 20 mm cube.
-3. Differential aggregate comparison against a PrusaSlicer reference slice of the same cube —
+1. Travel-stays-inside-region logic, to stop retracting ~1180 times on a 20 mm cube.
+2. Differential aggregate comparison against a PrusaSlicer reference slice of the same cube —
    layer count, deposited volume, bounding box. Black-box comparison of *outputs*, which the
    clean-room rule permits.
 4. **Print the cube on the MK3S**, watched, with the stop control in reach.

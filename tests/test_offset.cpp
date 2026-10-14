@@ -130,6 +130,45 @@ void test_degenerate_input() {
   CHECK(offset_rings(small, -5.0).empty());
 }
 
+// A square carrying extra vertices along its edges must offset to exactly the same thing as the
+// bare square, at every distance. The failure this pins is narrow and was shipped once: at a
+// distance equal to the collinear vertex's distance from the corner, two displaced edges meet at
+// the endpoint of a third, which is a T-junction rather than a crossing. The splitting pass used
+// to ignore those, the chaining walk turned into the leftover spur, and the ring was dropped
+// whole - a 20 mm cube lost all infill on the two layers where its facet diagonals cross.
+void test_collinear_vertices_do_not_change_the_offset() {
+  const std::vector<Polygon> plain{rect(0.0, 0.0, 20.0, 20.0)};
+  const std::vector<Polygon> with_collinear{Polygon{
+      Point2{mm_to_units(0.9), mm_to_units(0.0)}, Point2{mm_to_units(20.0), mm_to_units(0.0)},
+      Point2{mm_to_units(20.0), mm_to_units(0.9)}, Point2{mm_to_units(20.0), mm_to_units(20.0)},
+      Point2{mm_to_units(19.1), mm_to_units(20.0)}, Point2{mm_to_units(0.0), mm_to_units(20.0)},
+      Point2{mm_to_units(0.0), mm_to_units(19.1)}, Point2{mm_to_units(0.0), mm_to_units(0.0)}}};
+
+  CHECK_NEAR(net_area(plain), 400.0, 1e-9);
+  CHECK_NEAR(net_area(with_collinear), 400.0, 1e-9);
+
+  // -0.9 is the one that used to fail: it is exactly where the extra vertices sit.
+  for (const double delta : {-0.225, -0.45, -0.675, -0.9, -1.0, -2.0, 1.0}) {
+    const std::vector<Polygon> expected = offset_rings(plain, delta);
+    const std::vector<Polygon> actual = offset_rings(with_collinear, delta);
+    CHECK_EQ(actual.size(), expected.size());
+    CHECK_NEAR(net_area(actual), net_area(expected), 1e-6);
+  }
+
+  CHECK_NEAR(net_area(offset_rings(with_collinear, -0.9)), 331.24, 1e-6);
+}
+
+// The same hazard from the other side: a T-junction between two rings of one operand. The spur
+// is a separate ring touching the square's edge at a single point, which the splitting pass has
+// to notice even though nothing crosses anything.
+void test_touching_rings_still_offset() {
+  std::vector<Polygon> input{rect(0.0, 0.0, 20.0, 20.0), rect(20.0, 8.0, 26.0, 12.0)};
+  orient_rings(input);
+  const std::vector<Polygon> out = offset_rings(input, -1.0);
+  CHECK(!out.empty());
+  CHECK(net_area(out) > 0.0);
+}
+
 void test_offset_is_deterministic() {
   std::vector<Polygon> input{rect(0.0, 0.0, 20.0, 20.0), rect(5.0, 5.0, 15.0, 15.0)};
   orient_rings(input);
@@ -148,6 +187,8 @@ int main() {
   test_zero_offset_is_identity();
   test_orientation_normalises_nesting();
   test_degenerate_input();
+  test_collinear_vertices_do_not_change_the_offset();
+  test_touching_rings_still_offset();
   test_offset_is_deterministic();
   return slicem_test::summary("slicem_offset_tests");
 }

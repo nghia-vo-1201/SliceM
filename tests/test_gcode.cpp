@@ -326,6 +326,45 @@ void test_filament_matches_an_independent_calculation() {
   CHECK(retract_count >= static_cast<double>(job.sliced.layers.size()));
 }
 
+// Every layer of a solid cube is filled, and the solid shell lands exactly on the first and last
+// `solid_layers`. The first half of that was shipped broken: the two layers where the cube's facet
+// diagonals cross the slice plane came out with no infill of any kind, which prints a void.
+void test_every_layer_of_a_cube_is_filled() {
+  const PrinterProfile profile = mk3s_profile();
+  GcodeSettings settings;
+  const Job job = slice_and_emit(settings, profile);
+  const int layer_count = static_cast<int>(job.sliced.layers.size());
+
+  std::vector<int> solid_on_layer;
+  std::vector<int> sparse_on_layer;
+  int layer = -1;
+  std::istringstream lines(job.text);
+  std::string line;
+  while (std::getline(lines, line)) {
+    while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) {
+      line.pop_back();
+    }
+    if (line.rfind(";LAYER_CHANGE", 0) == 0) {
+      ++layer;
+    } else if (line == ";TYPE:Solid infill") {
+      solid_on_layer.push_back(layer);
+    } else if (line == ";TYPE:Internal infill") {
+      sparse_on_layer.push_back(layer);
+    }
+  }
+
+  CHECK_EQ(static_cast<int>(solid_on_layer.size()) + static_cast<int>(sparse_on_layer.size()),
+           layer_count);
+  CHECK_EQ(static_cast<int>(solid_on_layer.size()), 2 * settings.solid_layers);
+
+  for (const int index : solid_on_layer) {
+    CHECK(index < settings.solid_layers || index >= layer_count - settings.solid_layers);
+  }
+  for (const int index : sparse_on_layer) {
+    CHECK(index >= settings.solid_layers && index < layer_count - settings.solid_layers);
+  }
+}
+
 void test_centering_keeps_the_skirt_on_the_bed() {
   const PrinterProfile profile = mk3s_profile();
   GcodeSettings settings;
@@ -483,6 +522,7 @@ void test_clearance_values_are_absent() {
 int main() {
   test_cube_job_is_structurally_sound();
   test_filament_matches_an_independent_calculation();
+  test_every_layer_of_a_cube_is_filled();
   test_centering_keeps_the_skirt_on_the_bed();
   test_settings_outside_the_profile_are_refused();
   test_writer_refuses_rather_than_clamps();

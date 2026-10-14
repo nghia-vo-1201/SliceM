@@ -202,6 +202,108 @@ void test_surfaces_are_deterministic() {
   }
 }
 
+// A prism with a 3-layer shell: the bottom three layers and the top three are solid across the
+// whole region, and everything between them is sparse.
+void test_shell_covers_the_end_layers() {
+  const std::vector<Polygon> region{rect(0.0, 0.0, 10.0, 10.0)};
+  const std::vector<std::vector<Polygon>> layers(10, region);
+
+  const std::vector<std::vector<Polygon>> solid = solid_shell_regions(layers, 3);
+  CHECK_EQ(solid.size(), std::size_t{10});
+  if (solid.size() != 10) {
+    return;
+  }
+  for (std::size_t i = 0; i < 3; ++i) {
+    CHECK_NEAR(net_area(solid[i]), 100.0, 1e-9);
+  }
+  for (std::size_t i = 3; i < 7; ++i) {
+    CHECK(solid[i].empty());
+  }
+  for (std::size_t i = 7; i < 10; ++i) {
+    CHECK_NEAR(net_area(solid[i]), 100.0, 1e-9);
+  }
+}
+
+// The case the hard-coded "first and last N layers are solid" rule got wrong: a shoulder part way
+// up the part. A 20 mm column narrows to 10 mm at layer 6, so layer 5 is roofed only over the
+// narrow footprint and the surrounding ring faces open air. That ring and the two layers carrying
+// it must be solid, and all three sit in the middle of the part where the old rule saw nothing.
+void test_internal_ceiling_is_solid_in_the_middle() {
+  const Polygon wide = rect(0.0, 0.0, 20.0, 20.0);
+  const Polygon narrow = rect(5.0, 5.0, 15.0, 15.0);
+  std::vector<std::vector<Polygon>> layers(12, std::vector<Polygon>{wide});
+  for (std::size_t i = 6; i < 12; ++i) {
+    layers[i] = std::vector<Polygon>{narrow};
+  }
+
+  const std::vector<std::vector<Polygon>> solid = solid_shell_regions(layers, 3);
+  CHECK_EQ(solid.size(), std::size_t{12});
+  if (solid.size() != 12) {
+    return;
+  }
+
+  // The exposed shoulder and the two layers beneath it: the 300 mm2 ring the column does not
+  // cover, as an outer contour with the column's footprint as a hole.
+  for (std::size_t i = 3; i <= 5; ++i) {
+    CHECK_NEAR(net_area(solid[i]), 300.0, 1e-9);
+    CHECK_EQ(solid[i].size(), std::size_t{2});
+    CHECK_EQ(count_positive(solid[i]), 1);
+  }
+
+  // Below that, the part's own base shell takes over and covers the full footprint.
+  for (std::size_t i = 0; i < 3; ++i) {
+    CHECK_NEAR(net_area(solid[i]), 400.0, 1e-9);
+  }
+
+  // The narrow column stands on solid material and is roofed by itself, so its lower layers are
+  // sparse. The old first-and-last rule would have made layers 6 to 8 solid instead of 3 to 5.
+  for (std::size_t i = 6; i <= 8; ++i) {
+    CHECK(solid[i].empty());
+  }
+
+  // Its own top shell is the column's footprint, not the wide one.
+  for (std::size_t i = 9; i < 12; ++i) {
+    CHECK_NEAR(net_area(solid[i]), 100.0, 1e-9);
+  }
+}
+
+void test_shell_of_zero_leaves_everything_sparse() {
+  const std::vector<std::vector<Polygon>> layers(5, std::vector<Polygon>{rect(0.0, 0.0, 10.0, 10.0)});
+  const std::vector<std::vector<Polygon>> solid = solid_shell_regions(layers, 0);
+  CHECK_EQ(solid.size(), std::size_t{5});
+  for (const std::vector<Polygon>& rings : solid) {
+    CHECK(rings.empty());
+  }
+}
+
+// A shell thicker than the part cannot reach past either end, and must not index outside it.
+void test_shell_thicker_than_the_part() {
+  const std::vector<std::vector<Polygon>> layers(2, std::vector<Polygon>{rect(0.0, 0.0, 10.0, 10.0)});
+  const std::vector<std::vector<Polygon>> solid = solid_shell_regions(layers, 20);
+  CHECK_EQ(solid.size(), std::size_t{2});
+  if (solid.size() != 2) {
+    return;
+  }
+  CHECK_NEAR(net_area(solid[0]), 100.0, 1e-9);
+  CHECK_NEAR(net_area(solid[1]), 100.0, 1e-9);
+}
+
+void test_shell_handles_empty_input() {
+  CHECK(solid_shell_regions({}, 3).empty());
+
+  const std::vector<std::vector<Polygon>> layers{std::vector<Polygon>{rect(0.0, 0.0, 10.0, 10.0)},
+                                                 std::vector<Polygon>{},
+                                                 std::vector<Polygon>{rect(0.0, 0.0, 10.0, 10.0)}};
+  const std::vector<std::vector<Polygon>> solid = solid_shell_regions(layers, 2);
+  CHECK_EQ(solid.size(), std::size_t{3});
+  if (solid.size() != 3) {
+    return;
+  }
+  CHECK(solid[1].empty());
+  CHECK_NEAR(net_area(solid[0]), 100.0, 1e-9);
+  CHECK_NEAR(net_area(solid[2]), 100.0, 1e-9);
+}
+
 }  // namespace
 
 int main() {
@@ -212,5 +314,10 @@ int main() {
   test_single_layer_is_top_and_bottom();
   test_degenerate_input();
   test_surfaces_are_deterministic();
+  test_shell_covers_the_end_layers();
+  test_internal_ceiling_is_solid_in_the_middle();
+  test_shell_of_zero_leaves_everything_sparse();
+  test_shell_thicker_than_the_part();
+  test_shell_handles_empty_input();
   return slicem_test::summary("slicem_surface_tests");
 }

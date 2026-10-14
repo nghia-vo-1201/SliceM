@@ -14,8 +14,8 @@ struct GcodeSettings {
   int perimeter_count = 2;
   double infill_density = 0.20;
 
-  // Until solid top/bottom detection exists, the first and last few layers are simply treated
-  // as solid. This is a placeholder for real surface detection, not a modelling decision.
+  // Thickness, in layers, of the solid shell grown beneath every detected top surface and above
+  // every bottom surface. 0 leaves all surfaces sparse, which prints the part open.
   int solid_layers = 3;
 
   double first_layer_speed_mm_s = 20.0;

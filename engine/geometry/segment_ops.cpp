@@ -13,6 +13,26 @@ struct SplitPoint {
   Point2 point;
 };
 
+// Exact on the integer grid. Every coordinate reaching this point is a build-volume coordinate
+// plus at most an offset distance, so it stays below 1e9 units and the products below stay two
+// orders of magnitude inside int64_t's range.
+bool point_strictly_inside(const Segment& s, const Point2& p, long double& t) {
+  const int64_t dx = s.b.x - s.a.x;
+  const int64_t dy = s.b.y - s.a.y;
+  const int64_t px = p.x - s.a.x;
+  const int64_t py = p.y - s.a.y;
+  if (dx * py - dy * px != 0) {
+    return false;
+  }
+  const int64_t along = dx * px + dy * py;
+  const int64_t length_sq = dx * dx + dy * dy;
+  if (along <= 0 || along >= length_sq) {
+    return false;
+  }
+  t = static_cast<long double>(along) / static_cast<long double>(length_sq);
+  return true;
+}
+
 }  // namespace
 
 long double to_ld(int64_t v) { return static_cast<long double>(v); }
@@ -56,6 +76,30 @@ std::vector<Segment> split_at_intersections(const std::vector<Segment>& segments
         // endpoint exactly and can be re-chained without tolerance.
         splits[i].push_back(SplitPoint{ti, crossing});
         splits[j].push_back(SplitPoint{tj, crossing});
+      }
+    }
+  }
+
+  // A segment that merely *ends* on another's interior is a T-junction, not a crossing, so the
+  // test above rejects it - both parameters have to be strictly inside. It still has to be split:
+  // an unsplit crossbar leaves the arrangement non-planar, and the chaining walk then turns into
+  // the stem and never closes the ring, so the whole loop is silently dropped.
+  //
+  // This is not a rare degeneracy. A triangulated box slices into contours carrying collinear
+  // vertices wherever a facet diagonal meets the plane, and offsetting such a contour by exactly
+  // the collinear vertex's distance from the corner lands a displaced endpoint precisely on
+  // another displaced edge. Inset by 0.9 mm, a 20 mm cube lost two whole layers of infill to it.
+  for (std::size_t i = 0; i < segments.size(); ++i) {
+    for (std::size_t j = 0; j < segments.size(); ++j) {
+      if (i == j) {
+        continue;
+      }
+      long double t = 0.0L;
+      if (point_strictly_inside(segments[i], segments[j].a, t)) {
+        splits[i].push_back(SplitPoint{t, segments[j].a});
+      }
+      if (point_strictly_inside(segments[i], segments[j].b, t)) {
+        splits[i].push_back(SplitPoint{t, segments[j].b});
       }
     }
   }

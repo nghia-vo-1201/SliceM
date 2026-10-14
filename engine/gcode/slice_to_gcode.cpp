@@ -7,10 +7,12 @@
 #include <vector>
 
 #include "gcode/gcode_writer.h"
+#include "geometry/boolean.h"
 #include "geometry/offset.h"
 #include "geometry/polygon.h"
 #include "slicing/infill.h"
 #include "slicing/perimeters.h"
+#include "slicing/surfaces.h"
 #include "slicem_version.h"
 
 namespace slicem {
@@ -88,10 +90,6 @@ double capped_speed(double requested, const PrinterProfile& profile,
     speed = std::fmin(speed, profile.max_volumetric_speed_mm3_s / mm3_per_mm);
   }
   return speed;
-}
-
-bool layer_is_solid(int index, int layer_count, const GcodeSettings& settings) {
-  return index < settings.solid_layers || index >= layer_count - settings.solid_layers;
 }
 
 double layer_infill_angle(int index) {
@@ -464,6 +462,24 @@ GcodeStats write_gcode(const SliceResult& sliced, const PrinterProfile& profile,
     return stats;
   }
 
+  // Perimeters for the whole part are generated before anything is written, because which parts
+  // of a layer are solid depends on the layers above and below it. Doing it here also means a
+  // geometry problem surfaces before a single line reaches the stream.
+  PerimeterSettings perimeter_settings;
+  perimeter_settings.extrusion_width_mm = settings.extrusion_width_mm;
+  perimeter_settings.perimeter_count = settings.perimeter_count;
+
+  std::vector<PerimeterResult> perimeters;
+  perimeters.reserve(sliced.layers.size());
+  std::vector<std::vector<Polygon>> infill_regions;
+  infill_regions.reserve(sliced.layers.size());
+  for (const Layer& layer : sliced.layers) {
+    perimeters.push_back(generate_perimeters(layer.contours, perimeter_settings));
+    infill_regions.push_back(perimeters.back().infill_region);
+  }
+  const std::vector<std::vector<Polygon>> solid_regions =
+      solid_shell_regions(infill_regions, settings.solid_layers);
+
   GcodeWriter w(out, profile);
   emit_header_comments(w, profile, settings);
   if (!emit_start_sequence(w, profile)) {
@@ -518,35 +534,47 @@ GcodeStats write_gcode(const SliceResult& sliced, const PrinterProfile& profile,
       }
     }
 
-    PerimeterSettings perimeter_settings;
-    perimeter_settings.extrusion_width_mm = settings.extrusion_width_mm;
-    perimeter_settings.perimeter_count = settings.perimeter_count;
-    const PerimeterResult perimeters = generate_perimeters(layer.contours, perimeter_settings);
+    const PerimeterResult& layer_perimeters = perimeters[static_cast<std::size_t>(i)];
 
-    for (const std::size_t index : perimeter_emission_order(perimeters.loops.size())) {
+    for (const std::size_t index : perimeter_emission_order(layer_perimeters.loops.size())) {
       const Feature feature = index == 0 ? Feature::kExternalPerimeter : Feature::kPerimeter;
       const double speed = capped_speed(feature_speed(feature, first_layer, settings), profile,
                                         settings);
-      if (!emitter.emit_rings(perimeters.loops[index], feature, speed)) {
+      if (!emitter.emit_rings(layer_perimeters.loops[index], feature, speed)) {
         stats.error = w.error();
         return stats;
       }
     }
 
-    if (!perimeters.infill_region.empty()) {
-      const bool solid = layer_is_solid(i, layer_count, settings);
+    if (!layer_perimeters.infill_region.empty()) {
       InfillSettings infill_settings;
       infill_settings.pattern = InfillPattern::kRectilinear;
       infill_settings.extrusion_width_mm = settings.extrusion_width_mm;
-      infill_settings.density = solid ? 1.0 : settings.infill_density;
       infill_settings.angle_degrees = layer_infill_angle(i);
-      if (infill_settings.density > 0.0) {
-        const Feature feature = solid ? Feature::kSolidInfill : Feature::kInternalInfill;
-        const double speed = capped_speed(feature_speed(feature, first_layer, settings), profile,
-                                          settings);
-        const std::vector<InfillLine> lines =
-            generate_infill(perimeters.infill_region, infill_settings);
-        if (!emitter.emit_lines(lines, feature, speed)) {
+
+      const std::vector<Polygon>& solid = solid_regions[static_cast<std::size_t>(i)];
+      if (!solid.empty()) {
+        infill_settings.density = 1.0;
+        const double speed =
+            capped_speed(feature_speed(Feature::kSolidInfill, first_layer, settings), profile,
+                         settings);
+        if (!emitter.emit_lines(generate_infill(solid, infill_settings), Feature::kSolidInfill,
+                                speed)) {
+          stats.error = w.error();
+          return stats;
+        }
+      }
+
+      const std::vector<Polygon> sparse =
+          solid.empty() ? layer_perimeters.infill_region
+                        : polygon_difference(layer_perimeters.infill_region, solid);
+      if (!sparse.empty() && settings.infill_density > 0.0) {
+        infill_settings.density = settings.infill_density;
+        const double speed =
+            capped_speed(feature_speed(Feature::kInternalInfill, first_layer, settings), profile,
+                         settings);
+        if (!emitter.emit_lines(generate_infill(sparse, infill_settings),
+                                Feature::kInternalInfill, speed)) {
           stats.error = w.error();
           return stats;
         }

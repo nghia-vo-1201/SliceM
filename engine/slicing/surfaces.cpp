@@ -39,4 +39,47 @@ std::vector<LayerSurfaces> detect_surfaces(const std::vector<std::vector<Polygon
   return out;
 }
 
+std::vector<std::vector<Polygon>> solid_shell_regions(
+    const std::vector<std::vector<Polygon>>& layer_regions, int shell_layers) {
+  std::vector<std::vector<Polygon>> solid(layer_regions.size());
+  if (shell_layers <= 0) {
+    return solid;
+  }
+
+  const std::vector<LayerSurfaces> surfaces = detect_surfaces(layer_regions);
+  const int count = static_cast<int>(layer_regions.size());
+
+  for (int i = 0; i < count; ++i) {
+    const std::size_t index = static_cast<std::size_t>(i);
+    if (layer_regions[index].empty()) {
+      continue;
+    }
+
+    std::vector<Polygon> exposed;
+    // An empty operand is never handed to the boolean: the first contributing set is adopted
+    // outright, so a layer with a single contributing surface costs no boolean at all.
+    const auto accumulate = [&exposed](const std::vector<Polygon>& rings) {
+      if (rings.empty()) {
+        return;
+      }
+      exposed = exposed.empty() ? rings : polygon_union(exposed, rings);
+    };
+
+    for (int k = 0; k < shell_layers; ++k) {
+      if (i + k < count) {
+        accumulate(surfaces[static_cast<std::size_t>(i + k)].top);
+      }
+      if (i - k >= 0) {
+        accumulate(surfaces[static_cast<std::size_t>(i - k)].bottom);
+      }
+    }
+
+    if (!exposed.empty()) {
+      solid[index] = polygon_intersection(layer_regions[index], exposed);
+    }
+  }
+
+  return solid;
+}
+
 }  // namespace slicem

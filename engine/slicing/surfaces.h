@@ -30,4 +30,21 @@ struct LayerSurfaces {
 // defined by subtracting both, so the three sets always tile the region without overlap.
 std::vector<LayerSurfaces> detect_surfaces(const std::vector<std::vector<Polygon>>& layer_regions);
 
+// The region of each layer that must be printed solid, given a shell `shell_layers` thick.
+//
+// One solid layer under a ceiling is not enough: it is laid across the gaps of the sparse infill
+// below it and sags into them. The shell is therefore thickened by projecting every exposed
+// surface back into the layers that have to carry it - a top surface downwards, a bottom surface
+// upwards - and a layer is solid wherever any projection lands on it:
+//
+//   solid[i] = region[i] & ( top[i] | top[i+1] | ... | top[i+shell-1]
+//                          | bottom[i] | bottom[i-1] | ... | bottom[i-shell+1] )
+//
+// `shell_layers` of 0 returns empty regions throughout, which prints a part with open surfaces -
+// a legitimate request for a vase, and wrong for anything else.
+//
+// The input is the same per-layer infill regions `detect_surfaces` takes.
+std::vector<std::vector<Polygon>> solid_shell_regions(
+    const std::vector<std::vector<Polygon>>& layer_regions, int shell_layers);
+
 }  // namespace slicem
