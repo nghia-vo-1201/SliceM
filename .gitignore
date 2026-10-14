@@ -32,3 +32,7 @@ research/raw/
 
 .venv/
 __pycache__/
+
+# Generated toolpath output from the CLI. Reproducible from the sample models in research/.
+*.gcode
+*.bgcode

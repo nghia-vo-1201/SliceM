@@ -17,3 +17,18 @@ add_executable(slicem_infill_tests test_infill.cpp)
 target_include_directories(slicem_infill_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(slicem_infill_tests PRIVATE slicem_engine slicem_warnings)
 add_test(NAME slicem_infill_tests COMMAND slicem_infill_tests)
+
+add_executable(slicem_boolean_tests test_boolean.cpp)
+target_include_directories(slicem_boolean_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(slicem_boolean_tests PRIVATE slicem_engine slicem_warnings)
+add_test(NAME slicem_boolean_tests COMMAND slicem_boolean_tests)
+
+add_executable(slicem_surface_tests test_surfaces.cpp)
+target_include_directories(slicem_surface_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(slicem_surface_tests PRIVATE slicem_engine slicem_warnings)
+add_test(NAME slicem_surface_tests COMMAND slicem_surface_tests)
+
+add_executable(slicem_gcode_tests test_gcode.cpp)
+target_include_directories(slicem_gcode_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(slicem_gcode_tests PRIVATE slicem_engine slicem_warnings)
+add_test(NAME slicem_gcode_tests COMMAND slicem_gcode_tests)

@@ -4,6 +4,8 @@
 #include <iostream>
 #include <string>
 
+#include "gcode/printer_profile.h"
+#include "gcode/slice_to_gcode.h"
 #include "slicing/slicer.h"
 #include "slicing/stl_reader.h"
 
@@ -13,9 +15,13 @@ void print_usage() {
   std::cout << "slicem - SliceM engine harness\n\n"
                "usage: slicem [options] <model.stl>\n\n"
                "options:\n"
-               "  --layer-height <mm>   layer height (default 0.2)\n"
-               "  --per-layer           print one row per layer\n"
-               "  -h, --help            this message\n";
+               "  --layer-height <mm>     layer height (default 0.2)\n"
+               "  --per-layer             print one row per layer\n"
+               "  --gcode <out.gcode>     write MK3S G-code to this file\n"
+               "  --perimeters <n>        perimeter count (default 2)\n"
+               "  --infill-density <d>    sparse infill density 0..1 (default 0.2)\n"
+               "  --extrusion-width <mm>  extrusion width (default 0.45)\n"
+               "  -h, --help              this message\n";
 }
 
 double total_area_mm2(const slicem::Layer& layer) {
@@ -30,8 +36,10 @@ double total_area_mm2(const slicem::Layer& layer) {
 
 int main(int argc, char** argv) {
   std::string path;
+  std::string gcode_path;
   double layer_height_mm = 0.2;
   bool per_layer = false;
+  slicem::GcodeSettings gcode_settings;
 
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
@@ -43,6 +51,14 @@ int main(int argc, char** argv) {
       per_layer = true;
     } else if (arg == "--layer-height" && i + 1 < argc) {
       layer_height_mm = std::atof(argv[++i]);
+    } else if (arg == "--gcode" && i + 1 < argc) {
+      gcode_path = argv[++i];
+    } else if (arg == "--perimeters" && i + 1 < argc) {
+      gcode_settings.perimeter_count = std::atoi(argv[++i]);
+    } else if (arg == "--infill-density" && i + 1 < argc) {
+      gcode_settings.infill_density = std::atof(argv[++i]);
+    } else if (arg == "--extrusion-width" && i + 1 < argc) {
+      gcode_settings.extrusion_width_mm = std::atof(argv[++i]);
     } else if (!arg.empty() && arg[0] == '-') {
       std::cerr << "unknown option: " << arg << "\n";
       return 2;
@@ -106,6 +122,29 @@ int main(int argc, char** argv) {
   if (!sliced.layers.empty()) {
     std::cout << "mean area      " << area_sum / static_cast<double>(sliced.layers.size())
               << " mm^2 per layer\n";
+  }
+
+  if (!gcode_path.empty()) {
+    gcode_settings.layer_height_mm = layer_height_mm;
+    const slicem::PrinterProfile profile = slicem::mk3s_profile();
+    const slicem::GcodeStats stats =
+        slicem::write_gcode_file(sliced, profile, gcode_settings, gcode_path);
+    if (!stats.ok) {
+      std::cerr << "error: g-code not written: " << stats.error << "\n";
+      return 1;
+    }
+    std::cout << "\ng-code         " << gcode_path << "\n"
+              << "profile        " << profile.name << " (legacy family)\n"
+              << "emitted layers " << stats.layers << "\n"
+              << "top z          " << stats.print_z_max_mm << " mm\n"
+              << "path length    " << stats.extruded_path_length_mm << " mm\n"
+              << "deposited      " << stats.deposited_volume_mm3 << " mm^3\n"
+              << "filament used  " << stats.filament_used_mm << " mm ("
+              << stats.filament_used_cm3 << " cm^3)\n"
+              << "deposit bbox   x " << stats.deposit_min_x_mm << " .. "
+              << stats.deposit_max_x_mm << "   y " << stats.deposit_min_y_mm << " .. "
+              << stats.deposit_max_y_mm << "\n"
+              << "NOT VALIDATED ON HARDWARE - run the gcode-validation pass before printing\n";
   }
 
   if (per_layer) {
