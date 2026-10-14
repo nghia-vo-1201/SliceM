@@ -47,19 +47,17 @@ Copy-Item (Join-Path $BuildDir "gui\slicem-gui.exe") $stage
 Copy-Item (Join-Path $BuildDir "cli\slicem.exe")     $stage
 Copy-Item (Join-Path $root "README.md")              $stage
 
-$deploy = Get-ChildItem $ucrt -Filter "windeployqt*.exe" | Select-Object -First 1
-if (-not $deploy) { throw "windeployqt not found in $ucrt" }
+# Runs windeployqt and then walks the real import tables, because MSYS2's Qt pulls in ~25 further
+# MinGW libraries that windeployqt does not know about. A hardcoded list was wrong here before and
+# would have shipped a zip that cannot start on any machine without MSYS2.
+& (Join-Path $PSScriptRoot "deploy_runtime.ps1") -Exe (Join-Path $stage "slicem-gui.exe") -QtBin $ucrt
+if ($LASTEXITCODE -ne 0) { throw "runtime deployment failed" }
 
-$env:PATH = "$ucrt;" + $env:PATH
-& $deploy.FullName --release --no-translations --no-system-d3d-compiler --no-opengl-sw (Join-Path $stage "slicem-gui.exe")
-if ($LASTEXITCODE -ne 0) { throw "windeployqt failed" }
+# The CLI is a console exe from the same toolchain and needs the compiler runtime too. Walking it
+# separately costs nothing and does not assume its imports are a subset of the GUI's.
+& (Join-Path $PSScriptRoot "deploy_runtime.ps1") -Exe (Join-Path $stage "slicem.exe") -QtBin $ucrt -SkipWindeployqt
+if ($LASTEXITCODE -ne 0) { throw "runtime deployment failed for the CLI" }
 
-# windeployqt handles Qt, not the compiler runtime. Without these the exe fails to start on a
-# machine that has never seen MSYS2.
-foreach ($dll in @("libgcc_s_seh-1.dll", "libstdc++-6.dll", "libwinpthread-1.dll")) {
-  $src = Join-Path $ucrt $dll
-  if (Test-Path $src) { Copy-Item $src $stage }
-}
 
 $zip = Join-Path $OutDir "$stageName.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }
